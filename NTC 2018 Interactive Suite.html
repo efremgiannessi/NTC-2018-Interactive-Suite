@@ -1,0 +1,862 @@
+<!DOCTYPE html>
+<html lang="it" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NTC 2018 - Suite Ultimate Dark</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Lucide Icons (via CDN script for simple svg injection if needed, strictly using standard img tags or text here) -->
+    
+    <!-- Placeholder Comments Required -->
+    <!-- Chosen Palette: Dark Mode Engineering (Slate 900 / Blue 500 / Emerald 400) -->
+    <!-- Application Structure Plan: 
+         1. Header with Tabs.
+         2. Section "Carichi": Includes a Modal for Slab Calculation. Inputs feed Global Check.
+         3. Section "Clima": Comparison Bar Chart added.
+         4. Section "Sismica": Dark themed Spectrum Chart. Inputs feed Global Check.
+         5. Section "Verifica Globale": NEW. Takes Total Weight (Sec 1) + Spectral Acc (Sec 3) -> Base Shear.
+         6. Section "Geotecnica": Wall Pressure Diagram added.
+         Why: Interconnected modules allow a full building analysis flow in one view. -->
+    <!-- Visualization & Content Choices:
+         - Charts: Chart.js used for Spectrum (Line), Climate Compare (Bar), Wall Pressure (Area/Line).
+         - Theme: Dark background reduces eye strain for engineering software vibe.
+         - Interaction: Modals for sub-calculations (Solaio), Real-time sliders.
+         - NO SVG/Mermaid. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        slate: {
+                            850: '#1e293b', // Custom card bg
+                            900: '#0f172a', // Main bg
+                        },
+                        eng: {
+                            accent: '#3b82f6', // Blue 500
+                            success: '#10b981', // Emerald 500
+                            danger: '#ef4444', // Red 500
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Inter', system-ui, sans-serif; background-color: #0f172a; color: #e2e8f0; }
+        
+        /* Chart Container Constraint */
+        .chart-container {
+            position: relative;
+            width: 100%;
+            height: 350px;
+            max-width: 100%; 
+        }
+
+        /* Custom Input Styles for Dark Mode */
+        .eng-input {
+            background-color: #1e293b; /* slate-800 */
+            border: 1px solid #334155; /* slate-700 */
+            color: #f1f5f9;
+            padding: 0.5rem;
+            border-radius: 0.375rem;
+            width: 100%;
+            font-size: 0.875rem;
+            transition: all 0.2s;
+        }
+        .eng-input:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+        }
+        .eng-label {
+            display: block;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #94a3b8; /* slate-400 */
+            margin-bottom: 0.25rem;
+        }
+
+        /* Tabs */
+        .nav-btn {
+            padding: 0.75rem 1rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #94a3b8;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+        }
+        .nav-btn:hover { color: #f1f5f9; }
+        .nav-btn.active {
+            color: #3b82f6;
+            border-bottom-color: #3b82f6;
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 100;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.7);
+            backdrop-filter: blur(2px);
+        }
+        .modal-content {
+            background-color: #1e293b;
+            margin: 10% auto;
+            padding: 20px;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 600px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+        }
+    </style>
+</head>
+<body class="antialiased selection:bg-blue-500 selection:text-white">
+
+    <!-- Navbar -->
+    <nav class="bg-slate-800 border-b border-slate-700 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 bg-eng-accent rounded flex items-center justify-center font-bold text-white">N</div>
+                    <div>
+                        <h1 class="font-bold text-slate-100 leading-tight">NTC 2018</h1>
+                        <p class="text-[10px] text-slate-400 uppercase tracking-wider">Ultimate Dark Suite</p>
+                    </div>
+                </div>
+                <div class="hidden md:flex space-x-1">
+                    <button onclick="nav('loads')" class="nav-btn active">1. Carichi</button>
+                    <button onclick="nav('climate')" class="nav-btn">2. Clima</button>
+                    <button onclick="nav('seismic')" class="nav-btn">3. Sismica</button>
+                    <button onclick="nav('global')" class="nav-btn text-emerald-400">4. Verifica Globale</button>
+                    <button onclick="nav('geotech')" class="nav-btn">5. Geotecnica</button>
+                </div>
+            </div>
+        </div>
+        <!-- Mobile Nav Bar -->
+        <div class="md:hidden flex overflow-x-auto bg-slate-900 border-b border-slate-800">
+            <button onclick="nav('loads')" class="flex-shrink-0 px-4 py-3 text-xs text-slate-300">Carichi</button>
+            <button onclick="nav('climate')" class="flex-shrink-0 px-4 py-3 text-xs text-slate-300">Clima</button>
+            <button onclick="nav('seismic')" class="flex-shrink-0 px-4 py-3 text-xs text-slate-300">Sismica</button>
+            <button onclick="nav('global')" class="flex-shrink-0 px-4 py-3 text-xs text-emerald-400 font-bold">Globale</button>
+            <button onclick="nav('geotech')" class="flex-shrink-0 px-4 py-3 text-xs text-slate-300">Geotech</button>
+        </div>
+    </nav>
+
+    <!-- Main Container -->
+    <main class="max-w-7xl mx-auto px-4 py-8 space-y-8">
+
+        <!-- SECTION 1: LOADS (Carichi) -->
+        <section id="loads" class="view-section animate-fade-in">
+            <div class="flex justify-between items-end mb-6">
+                <div>
+                    <h2 class="text-2xl font-bold text-white">Analisi dei Carichi</h2>
+                    <p class="text-slate-400 text-sm mt-1">Definizione pesi unitari e combinazioni (SLU/SLE).</p>
+                </div>
+                <!-- Button trigger modal -->
+                <button onclick="openModal()" class="hidden sm:block bg-slate-700 hover:bg-slate-600 text-blue-400 border border-blue-500/30 px-3 py-2 rounded text-sm transition flex items-center gap-2">
+                    <span>🧮 Calcolatore Solaio</span>
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Inputs -->
+                <div class="bg-slate-800 p-5 rounded-lg border border-slate-700">
+                    <div class="flex justify-between items-center mb-4 border-b border-slate-700 pb-2">
+                        <h3 class="text-blue-400 font-semibold text-sm uppercase">Input Unitari (kN/m²)</h3>
+                        <button onclick="openModal()" class="sm:hidden text-xs text-blue-400 underline">Calc Solaio</button>
+                    </div>
+                    
+                    <div class="space-y-4">
+                        <div>
+                            <label class="eng-label">G1 - Peso Proprio Strutturale</label>
+                            <div class="flex gap-2">
+                                <input type="number" id="g1" value="3.00" step="0.01" class="eng-input" oninput="runCalculations()">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="eng-label">G2 - Permanente Portato</label>
+                            <input type="number" id="g2" value="2.50" step="0.01" class="eng-input" oninput="runCalculations()">
+                        </div>
+                        
+                        <div class="pt-4 border-t border-slate-700">
+                            <div class="flex justify-between items-center mb-2">
+                                <label class="eng-label">Carichi Variabili (Qk)</label>
+                                <button onclick="addQk()" class="text-xs bg-emerald-600/20 text-emerald-400 px-2 py-1 rounded hover:bg-emerald-600/30 transition">+ Aggiungi</button>
+                            </div>
+                            <div id="qk-list" class="space-y-2">
+                                <!-- Dynamic JS Injection -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Results Table -->
+                <div class="lg:col-span-2 bg-slate-800 rounded-lg border border-slate-700 overflow-hidden flex flex-col">
+                    <div class="px-5 py-3 bg-slate-850 border-b border-slate-700 flex justify-between">
+                        <span class="text-sm font-semibold text-slate-300">Combinazioni Generate</span>
+                        <span class="text-xs text-slate-500 font-mono">NTC18 Tab 2.5.I</span>
+                    </div>
+                    <div class="overflow-x-auto flex-1">
+                        <table class="w-full text-left text-sm text-slate-400">
+                            <thead class="bg-slate-900/50 text-xs uppercase font-semibold text-slate-500">
+                                <tr>
+                                    <th class="px-4 py-2">Stato</th>
+                                    <th class="px-4 py-2">Formula</th>
+                                    <th class="px-4 py-2 text-right">Totale (kN/m²)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="comb-table-body" class="divide-y divide-slate-700">
+                                <!-- JS Injection -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SECTION 2: CLIMATE -->
+        <section id="climate" class="view-section hidden">
+            <h2 class="text-2xl font-bold text-white mb-6">Azioni Climatiche</h2>
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Neve Input -->
+                <div class="bg-slate-800 p-5 rounded-lg border border-slate-700">
+                    <h3 class="text-blue-400 font-semibold text-sm uppercase mb-4 border-b border-slate-700 pb-2">Neve (NTC Cap 3.4)</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="eng-label">Zona Neve</label>
+                            <select id="snowZone" class="eng-input" onchange="runCalculations()">
+                                <option value="alp">Zona I - Alpina</option>
+                                <option value="med">Zona I - Mediterranea</option>
+                                <option value="II">Zona II</option>
+                                <option value="III">Zona III</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="eng-label">Altitudine: <span id="alt-disp" class="text-white">250</span> m</label>
+                            <input type="range" id="altitude" min="0" max="1500" value="250" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500" oninput="document.getElementById('alt-disp').innerText=this.value; runCalculations()">
+                        </div>
+                        <div class="p-3 bg-slate-900/50 rounded border border-slate-700 text-center">
+                            <div class="text-xs text-slate-500">Carico Neve (qs)</div>
+                            <div class="text-2xl font-bold text-white"><span id="res-qs">1.50</span> kN/m²</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Vento Input -->
+                <div class="bg-slate-800 p-5 rounded-lg border border-slate-700">
+                    <h3 class="text-blue-400 font-semibold text-sm uppercase mb-4 border-b border-slate-700 pb-2">Vento (NTC Cap 3.3)</h3>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="col-span-2">
+                            <label class="eng-label">Zona Vento</label>
+                            <select id="windZone" class="eng-input" onchange="runCalculations()">
+                                <option value="1">Zona 1</option>
+                                <option value="2">Zona 2</option>
+                                <option value="3">Zona 3 (Liguria/Toscana)</option>
+                                <option value="4">Zona 4</option>
+                                <option value="5">Zona 5</option>
+                                <option value="9">Zona 9 (Isole)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="eng-label">Rugosità</label>
+                            <select id="roughness" class="eng-input" onchange="runCalculations()">
+                                <option value="A">A - Urbano</option>
+                                <option value="B" selected>B - Suburbano</option>
+                                <option value="C">C - Rurale</option>
+                                <option value="D">D - Mare</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="eng-label">Altezza z (m)</label>
+                            <input type="number" id="windZ" value="10" class="eng-input" oninput="runCalculations()">
+                        </div>
+                    </div>
+                    <div class="mt-4 p-3 bg-slate-900/50 rounded border border-slate-700 text-center">
+                        <div class="text-xs text-slate-500">Pressione Vento (p)</div>
+                        <div class="text-2xl font-bold text-white"><span id="res-windP">0.55</span> kN/m²</div>
+                    </div>
+                </div>
+
+                <!-- Comparazione Grafica -->
+                <div class="bg-slate-800 p-5 rounded-lg border border-slate-700 flex flex-col">
+                    <h3 class="text-slate-400 font-semibold text-xs uppercase mb-2">Confronto Azioni</h3>
+                    <div class="flex-1 chart-container">
+                        <canvas id="climateChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SECTION 3: SEISMIC -->
+        <section id="seismic" class="view-section hidden">
+            <h2 class="text-2xl font-bold text-white mb-6">Azione Sismica</h2>
+            <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                
+                <!-- Inputs -->
+                <div class="bg-slate-800 p-5 rounded-lg border border-slate-700">
+                    <label class="eng-label text-emerald-400">Database Comuni</label>
+                    <select id="citySelect" class="eng-input mb-4" onchange="loadCity()">
+                        <option value="">Seleziona...</option>
+                        <!-- JS populated -->
+                    </select>
+
+                    <div class="grid grid-cols-3 gap-2 mb-4">
+                        <div><label class="eng-label">ag (g)</label><input type="number" id="ag" class="eng-input text-center" oninput="runCalculations()"></div>
+                        <div><label class="eng-label">F0</label><input type="number" id="F0" class="eng-input text-center" oninput="runCalculations()"></div>
+                        <div><label class="eng-label">Tc*</label><input type="number" id="Tc" class="eng-input text-center" oninput="runCalculations()"></div>
+                    </div>
+
+                    <div class="space-y-3">
+                        <div>
+                            <label class="eng-label">Suolo</label>
+                            <select id="soil" class="eng-input" onchange="runCalculations()">
+                                <option value="A">A - Roccia</option>
+                                <option value="B" selected>B - Depositi densi</option>
+                                <option value="C">C - Depositi medi</option>
+                                <option value="D">D - Depositi sciolti</option>
+                                <option value="E">E - Alluvionali</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="eng-label">Topografia</label>
+                            <select id="topo" class="eng-input" onchange="runCalculations()">
+                                <option value="T1">T1 - Piano</option>
+                                <option value="T2">T2 - Pendio</option>
+                                <option value="T3">T3 - Rilievo</option>
+                                <option value="T4">T4 - Crinale</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="eng-label">Fattore q</label>
+                            <input type="number" id="qFactor" value="2.5" step="0.1" class="eng-input" oninput="runCalculations()">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chart -->
+                <div class="lg:col-span-3 bg-slate-800 p-5 rounded-lg border border-slate-700">
+                    <div class="flex justify-between items-start mb-2">
+                        <h3 class="text-slate-300 font-semibold text-sm">Spettro di Risposta (SLV)</h3>
+                        <div class="text-xs text-slate-500">
+                            PGA attesa ($a_g \cdot S$): <span id="pga-res" class="text-white font-mono">0.00g</span>
+                        </div>
+                    </div>
+                    <div class="chart-container" style="height: 400px;">
+                        <canvas id="seismicChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SECTION 4: GLOBAL CHECK (New!) -->
+        <section id="global" class="view-section hidden">
+            <div class="flex items-center gap-3 mb-6">
+                <h2 class="text-2xl font-bold text-white">Verifica Globale Semplificata</h2>
+                <span class="bg-emerald-500/20 text-emerald-400 text-xs px-2 py-1 rounded border border-emerald-500/30">INTEGRATA</span>
+            </div>
+            
+            <p class="text-slate-400 mb-6 max-w-4xl">
+                Questo modulo calcola il <strong>Taglio alla Base ($F_h$)</strong> combinando i pesi definiti nella sezione <em>Carichi</em> con l'accelerazione spettrale definita nella sezione <em>Sismica</em>.
+                <br>Formula statica lineare: $F_h = S_d(T_1) \cdot W \cdot \lambda$
+            </p>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <!-- Building Params -->
+                <div class="bg-slate-800 p-6 rounded-lg border border-slate-700">
+                    <h3 class="text-blue-400 font-semibold text-sm uppercase mb-4">Geometria Edificio</h3>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="col-span-2">
+                            <label class="eng-label">Tipologia</label>
+                            <select id="bldgType" class="eng-input" onchange="runCalculations()">
+                                <option value="CA">Cemento Armato</option>
+                                <option value="STEEL">Acciaio</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="eng-label">Altezza H (m)</label>
+                            <input type="number" id="bldgH" value="9" class="eng-input" oninput="runCalculations()">
+                        </div>
+                        <div>
+                            <label class="eng-label">Num. Piani</label>
+                            <input type="number" id="bldgFloors" value="3" class="eng-input" oninput="runCalculations()">
+                        </div>
+                        <div class="col-span-2">
+                            <label class="eng-label">Area per Piano (m²)</label>
+                            <input type="number" id="bldgArea" value="120" class="eng-input" oninput="runCalculations()">
+                        </div>
+                    </div>
+                    
+                    <div class="mt-6 pt-4 border-t border-slate-700 space-y-2">
+                        <div class="flex justify-between text-sm">
+                            <span class="text-slate-400">Peso Sismico Unitario:</span>
+                            <span class="text-white font-mono" id="unit-weight-disp">0.00 kN/m²</span>
+                        </div>
+                        <div class="flex justify-between text-sm">
+                            <span class="text-slate-400">Periodo $T_1$ stimato:</span>
+                            <span class="text-white font-mono" id="t1-disp">0.00 s</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Global Result -->
+                <div class="flex flex-col gap-4">
+                    <div class="bg-gradient-to-br from-slate-800 to-slate-900 p-6 rounded-lg border border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.1)]">
+                        <h3 class="text-emerald-400 font-semibold text-sm uppercase mb-1">Taglio alla Base ($F_h$)</h3>
+                        <div class="flex items-baseline gap-2">
+                            <span id="global-shear" class="text-5xl font-bold text-white">0</span>
+                            <span class="text-xl text-slate-500">kN</span>
+                        </div>
+                        <p class="text-xs text-slate-500 mt-2">Valore da ripartire sui sistemi resistenti (setti/pilastri).</p>
+                    </div>
+
+                    <div class="bg-slate-800 p-6 rounded-lg border border-slate-700">
+                        <h3 class="text-slate-400 font-semibold text-xs uppercase mb-3">Dettaglio Calcolo</h3>
+                        <div class="space-y-2 text-sm">
+                            <div class="flex justify-between border-b border-slate-700 pb-1">
+                                <span class="text-slate-500">Massa Totale ($W$)</span>
+                                <span class="text-slate-200" id="global-W">0 kN</span>
+                            </div>
+                            <div class="flex justify-between border-b border-slate-700 pb-1">
+                                <span class="text-slate-500">Acc. Spettrale $S_d(T_1)$</span>
+                                <span class="text-slate-200" id="global-Sd">0 g</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-slate-500">Coeff. $\lambda$</span>
+                                <span class="text-slate-200">0.85</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SECTION 5: GEOTECH -->
+        <section id="geotech" class="view-section hidden">
+            <h2 class="text-2xl font-bold text-white mb-6">Geotecnica</h2>
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Inputs -->
+                <div class="bg-slate-800 p-5 rounded-lg border border-slate-700">
+                    <h3 class="text-blue-400 font-semibold text-sm uppercase mb-4">Terreno & Muro</h3>
+                    <div class="space-y-4">
+                        <div><label class="eng-label">Attrito $\phi'$ (°)</label><input type="number" id="geo-phi" value="30" class="eng-input" oninput="runCalculations()"></div>
+                        <div><label class="eng-label">Peso $\gamma$ (kN/m³)</label><input type="number" id="geo-gamma" value="18" class="eng-input" oninput="runCalculations()"></div>
+                        <div><label class="eng-label">Coesione $c'$ (kPa)</label><input type="number" id="geo-c" value="0" class="eng-input" oninput="runCalculations()"></div>
+                        <div><label class="eng-label">Altezza Muro $H$ (m)</label><input type="number" id="geo-h" value="4" class="eng-input" oninput="runCalculations()"></div>
+                    </div>
+                    
+                    <div class="mt-6 p-3 bg-slate-900 rounded border border-slate-700">
+                        <div class="flex justify-between text-sm mb-1">
+                            <span class="text-slate-400">Spinta Attiva $P_a$</span>
+                            <span class="text-white font-bold"><span id="res-pa">0</span> kN/m</span>
+                        </div>
+                        <div class="flex justify-between text-xs text-slate-500">
+                            <span>Coeff $K_a$</span>
+                            <span id="res-ka">0.33</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Visual -->
+                <div class="lg:col-span-2 bg-slate-800 p-5 rounded-lg border border-slate-700">
+                    <h3 class="text-slate-300 font-semibold text-sm mb-2">Diagramma Pressioni (Triangolare)</h3>
+                    <div class="chart-container">
+                        <canvas id="geoChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- SLAB CALCULATOR MODAL -->
+    <div id="slabModal" class="modal">
+        <div class="modal-content">
+            <div class="flex justify-between items-center mb-4 border-b border-slate-700 pb-2">
+                <h3 class="text-white font-bold text-lg">Calcolatore Peso Solaio (Analisi Carichi)</h3>
+                <button onclick="closeModal()" class="text-slate-400 hover:text-white">&times;</button>
+            </div>
+            <div id="slab-layers" class="space-y-3 mb-4">
+                <!-- JS Generated Layers -->
+            </div>
+            <div class="flex justify-between items-center bg-slate-900 p-3 rounded mb-4">
+                <span class="text-slate-400 text-sm">Totale G1 stimato:</span>
+                <span class="text-xl font-bold text-blue-400" id="slab-total">0.00 kN/m²</span>
+            </div>
+            <div class="flex justify-end gap-3">
+                <button onclick="closeModal()" class="px-4 py-2 text-slate-400 hover:text-white text-sm">Annulla</button>
+                <button onclick="applySlab()" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded text-sm">Applica a G1</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- LOGIC -->
+    <script>
+        // --- CONFIGURATION ---
+        Chart.defaults.color = '#64748b'; // slate-500
+        Chart.defaults.borderColor = '#334155'; // slate-700
+
+        // --- STATE ---
+        const state = {
+            qk: [{id: 1, val: 2.0, cat: 'A'}],
+            slabLayers: [
+                {name: 'Soletta CA', h: 0.05, w: 25},
+                {name: 'Alleggerimento', h: 0.20, w: 12}, // peso equivalente
+                {name: 'Massetto', h: 0.05, w: 20},
+                {name: 'Pavimento', h: 0.02, w: 22}
+            ],
+            charts: {}
+        };
+
+        const CITIES = [
+            {name: 'Ancona', ag: 0.205, F0: 2.39, Tc: 0.36},
+            {name: 'Bologna', ag: 0.165, F0: 2.45, Tc: 0.30},
+            {name: 'L\'Aquila', ag: 0.261, F0: 2.38, Tc: 0.35},
+            {name: 'Milano', ag: 0.050, F0: 2.48, Tc: 0.32},
+            {name: 'Napoli', ag: 0.125, F0: 2.42, Tc: 0.34},
+            {name: 'Roma', ag: 0.105, F0: 2.41, Tc: 0.33},
+            {name: 'Torino', ag: 0.055, F0: 2.49, Tc: 0.30},
+        ];
+
+        const PSI = {
+            'A': {p2: 0.3}, 'B': {p2: 0.3}, 'C': {p2: 0.6}, 'D': {p2: 0.6}, 'E': {p2: 0.8}
+        };
+
+        // --- NAVIGATION ---
+        function nav(sectionId) {
+            document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
+            document.getElementById(sectionId).classList.remove('hidden');
+            
+            document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
+            // Find nav btn connecting to this section (simple check)
+            const btns = document.querySelectorAll('.nav-btn');
+            if(sectionId === 'loads') btns[0].classList.add('active');
+            if(sectionId === 'climate') btns[1].classList.add('active');
+            if(sectionId === 'seismic') btns[2].classList.add('active');
+            if(sectionId === 'global') btns[3].classList.add('active');
+            if(sectionId === 'geotech') btns[4].classList.add('active');
+
+            // Resize charts on view change
+            Object.values(state.charts).forEach(c => c.resize());
+        }
+
+        // --- LOADS & COMBINATIONS ---
+        function addQk() {
+            state.qk.push({id: Date.now(), val: 0, cat: 'A'});
+            renderQk();
+            runCalculations();
+        }
+
+        function removeQk(id) {
+            state.qk = state.qk.filter(x => x.id !== id);
+            renderQk();
+            runCalculations();
+        }
+
+        function renderQk() {
+            const container = document.getElementById('qk-list');
+            container.innerHTML = state.qk.map(q => `
+                <div class="flex gap-2 items-center bg-slate-900/50 p-2 rounded border border-slate-700">
+                    <select class="bg-slate-800 text-xs text-slate-300 border-none rounded py-1" onchange="state.qk.find(x=>x.id==${q.id}).cat=this.value; runCalculations()">
+                        <option value="A" ${q.cat=='A'?'selected':''}>Cat. A</option>
+                        <option value="B" ${q.cat=='B'?'selected':''}>Cat. B</option>
+                        <option value="C" ${q.cat=='C'?'selected':''}>Cat. C</option>
+                    </select>
+                    <input type="number" class="w-20 bg-slate-800 text-xs text-white border-slate-700 rounded py-1 px-2" value="${q.val}" oninput="state.qk.find(x=>x.id==${q.id}).val=parseFloat(this.value)||0; runCalculations()">
+                    <button onclick="removeQk(${q.id})" class="text-slate-500 hover:text-red-400">&times;</button>
+                </div>
+            `).join('');
+        }
+
+        // --- MODAL SOLAIO ---
+        function openModal() {
+            document.getElementById('slabModal').style.display = 'block';
+            renderSlabLayers();
+        }
+        function closeModal() { document.getElementById('slabModal').style.display = 'none'; }
+        function renderSlabLayers() {
+            const container = document.getElementById('slab-layers');
+            let total = 0;
+            container.innerHTML = state.slabLayers.map((l, idx) => {
+                const w = l.h * l.w;
+                total += w;
+                return `
+                <div class="grid grid-cols-12 gap-2 text-sm items-center">
+                    <input class="col-span-4 bg-slate-800 border-slate-700 text-slate-300 rounded px-2 py-1" value="${l.name}" oninput="state.slabLayers[${idx}].name=this.value">
+                    <div class="col-span-3"><input type="number" step="0.01" class="w-full bg-slate-800 border-slate-700 text-slate-300 rounded px-2 py-1" value="${l.h}" oninput="state.slabLayers[${idx}].h=parseFloat(this.value); renderSlabLayers()"> <span class="text-[10px] text-slate-500">m</span></div>
+                    <div class="col-span-3"><input type="number" class="w-full bg-slate-800 border-slate-700 text-slate-300 rounded px-2 py-1" value="${l.w}" oninput="state.slabLayers[${idx}].w=parseFloat(this.value); renderSlabLayers()"> <span class="text-[10px] text-slate-500">kN/m³</span></div>
+                    <div class="col-span-2 text-right text-blue-400 font-mono">${w.toFixed(2)}</div>
+                </div>`;
+            }).join('');
+            document.getElementById('slab-total').innerText = total.toFixed(2) + " kN/m²";
+        }
+        function applySlab() {
+            let total = state.slabLayers.reduce((a,b) => a + (b.h*b.w), 0);
+            document.getElementById('g1').value = total.toFixed(2);
+            closeModal();
+            runCalculations();
+        }
+
+        // --- CORE CALCULATIONS ---
+        function runCalculations() {
+            // 1. LOADS
+            const g1 = parseFloat(document.getElementById('g1').value) || 0;
+            const g2 = parseFloat(document.getElementById('g2').value) || 0;
+            
+            // SLU calc
+            const permSLU = 1.3*g1 + 1.5*g2;
+            let rows = '';
+            
+            // Basic SLU row
+            if(state.qk.length === 0) {
+                 rows += `<tr><td class="px-4 py-2"><span class="text-xs bg-red-500/20 text-red-400 px-1 rounded">SLU</span></td><td class="px-4 py-2">Perm.</td><td class="px-4 py-2 text-right font-mono">${permSLU.toFixed(2)}</td></tr>`;
+            }
+            
+            // Variable SLU rows
+            state.qk.forEach((q, i) => {
+                let val = permSLU + 1.5 * q.val;
+                rows += `<tr><td class="px-4 py-2"><span class="text-xs bg-red-500/20 text-red-400 px-1 rounded">SLU</span></td><td class="px-4 py-2">Dom. Q${i+1}</td><td class="px-4 py-2 text-right font-mono text-white font-bold">${val.toFixed(2)}</td></tr>`;
+            });
+
+            // SLE Rare
+            let valSLE = g1 + g2;
+            state.qk.forEach(q => valSLE += q.val); // Simplified (all present)
+            rows += `<tr><td class="px-4 py-2"><span class="text-xs bg-blue-500/20 text-blue-400 px-1 rounded">SLE</span></td><td class="px-4 py-2">Rara</td><td class="px-4 py-2 text-right font-mono">${valSLE.toFixed(2)}</td></tr>`;
+            
+            document.getElementById('comb-table-body').innerHTML = rows;
+
+            // 2. CLIMATE
+            const snowZone = document.getElementById('snowZone').value;
+            const alt = parseFloat(document.getElementById('altitude').value);
+            let qs = 1.50; // simplific
+            if(snowZone === 'alp') qs = alt<=200 ? 1.5 : 1.39*(1+Math.pow(alt/728,2));
+            if(snowZone === 'med') qs = alt<=200 ? 1.5 : 1.35*(1+Math.pow(alt/602,2));
+            
+            // Wind
+            const wZone = document.getElementById('windZone').value;
+            const vb = (wZone === '9') ? 31 : (wZone === '5' ? 30 : 25);
+            const qb = 0.5 * 1.25 * vb*vb / 1000;
+            const windP = qb * 2.0; // Rough approx for display
+            
+            document.getElementById('res-qs').innerText = qs.toFixed(2);
+            document.getElementById('res-windP').innerText = windP.toFixed(2);
+            
+            // Update Climate Chart
+            if(state.charts.climate) {
+                state.charts.climate.data.datasets[0].data = [qs, windP];
+                state.charts.climate.update();
+            }
+
+            // 3. SEISMIC
+            const ag = parseFloat(document.getElementById('ag').value)||0;
+            const F0 = parseFloat(document.getElementById('F0').value)||0;
+            const Tc = parseFloat(document.getElementById('Tc').value)||0;
+            const soil = document.getElementById('soil').value;
+            
+            let Ss = 1.0; 
+            if(soil === 'B') Ss = Math.max(1, 1.4 - 0.4*F0*ag);
+            if(soil === 'C') Ss = Math.max(1, 1.7 - 0.6*F0*ag);
+            
+            const S = Ss; // Topo T1
+            const pga = ag * S;
+            document.getElementById('pga-res').innerText = pga.toFixed(3) + "g";
+
+            // Calc Spectrum Points
+            const Tb = Tc/3; 
+            const Td = 4.0*ag + 1.6;
+            const qFactor = parseFloat(document.getElementById('qFactor').value);
+            
+            let labels = [];
+            let dataSd = [];
+            
+            for(let t=0; t<=3.0; t+=0.1) {
+                labels.push(t.toFixed(1));
+                let val = 0;
+                if(t < Tb) val = ag*S * (t/Tb + (1/qFactor)*(1-t/Tb)); // Ramp
+                else if(t < Tc) val = ag*S/qFactor; // Plateau
+                else if(t < Td) val = (ag*S/qFactor)*(Tc/t);
+                else val = (ag*S/qFactor)*(Tc*Td/(t*t));
+                dataSd.push(val);
+            }
+            
+            if(state.charts.seismic) {
+                state.charts.seismic.data.labels = labels;
+                state.charts.seismic.data.datasets[0].data = dataSd;
+                state.charts.seismic.update();
+            }
+
+            // 4. GLOBAL CHECK
+            // Calculate Seismic Weight W
+            let unitW = g1 + g2;
+            state.qk.forEach(q => {
+                let psi2 = PSI[q.cat] ? PSI[q.cat].p2 : 0.3;
+                unitW += q.val * psi2;
+            });
+            document.getElementById('unit-weight-disp').innerText = unitW.toFixed(2) + " kN/m²";
+            
+            const area = parseFloat(document.getElementById('bldgArea').value);
+            const floors = parseFloat(document.getElementById('bldgFloors').value);
+            const H = parseFloat(document.getElementById('bldgH').value);
+            const W_tot = unitW * area * floors;
+            
+            document.getElementById('global-W').innerText = W_tot.toFixed(0) + " kN";
+            
+            // Estimate T1
+            const typ = document.getElementById('bldgType').value;
+            const C1 = typ === 'CA' ? 0.075 : 0.085;
+            const T1 = C1 * Math.pow(H, 0.75);
+            document.getElementById('t1-disp').innerText = T1.toFixed(3) + " s";
+            
+            // Get Sd(T1)
+            let Sd_T1 = 0;
+            if(T1 < Tc) Sd_T1 = ag*S/qFactor;
+            else Sd_T1 = (ag*S/qFactor)*(Tc/T1);
+            
+            document.getElementById('global-Sd').innerText = Sd_T1.toFixed(3) + " g";
+            
+            // Base Shear
+            const Fh = Sd_T1 * W_tot * 0.85; // Lambda
+            document.getElementById('global-shear').innerText = Fh.toFixed(1);
+
+            // 5. GEOTECH
+            const phi = parseFloat(document.getElementById('geo-phi').value) * (Math.PI/180);
+            const gamma = parseFloat(document.getElementById('geo-gamma').value);
+            const geoH = parseFloat(document.getElementById('geo-h').value);
+            
+            const ka = Math.pow(Math.tan(Math.PI/4 - phi/2), 2);
+            document.getElementById('res-ka').innerText = ka.toFixed(3);
+            
+            const Pa = 0.5 * gamma * geoH * geoH * ka;
+            document.getElementById('res-pa').innerText = Pa.toFixed(1);
+            
+            // Update Geo Chart
+            if(state.charts.geo) {
+                // Triangle points: (0,0) -> (Pressure, Depth)
+                const maxPress = gamma * geoH * ka;
+                state.charts.geo.data.labels = [0, maxPress]; // X axis is pressure
+                state.charts.geo.data.datasets[0].data = [{x:0, y:0}, {x:maxPress, y:geoH}]; // Y axis is depth (inverted visually)
+                state.charts.geo.update();
+            }
+        }
+
+        function loadCity() {
+            const val = document.getElementById('citySelect').value;
+            const c = CITIES.find(x => x.name === val);
+            if(c) {
+                document.getElementById('ag').value = c.ag;
+                document.getElementById('F0').value = c.F0;
+                document.getElementById('Tc').value = c.Tc;
+                runCalculations();
+            }
+        }
+
+        // --- INIT CHARTS & APP ---
+        window.onload = () => {
+            // Fill city select
+            const sel = document.getElementById('citySelect');
+            CITIES.forEach(c => {
+                const opt = document.createElement('option');
+                opt.value = c.name; opt.innerText = c.name;
+                sel.appendChild(opt);
+            });
+
+            renderQk();
+            renderSlabLayers();
+
+            // 1. Climate Chart (Bar)
+            const ctxClim = document.getElementById('climateChart').getContext('2d');
+            state.charts.climate = new Chart(ctxClim, {
+                type: 'bar',
+                data: {
+                    labels: ['Neve', 'Vento'],
+                    datasets: [{
+                        label: 'Pressione (kN/m²)',
+                        data: [0,0],
+                        backgroundColor: ['#3b82f6', '#0ea5e9'],
+                        borderColor: '#1e3a8a',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true, grid: { color: '#334155' } }, x: { grid: { display: false } } },
+                    plugins: { legend: { display: false } }
+                }
+            });
+
+            // 2. Seismic Chart (Line)
+            const ctxSeis = document.getElementById('seismicChart').getContext('2d');
+            state.charts.seismic = new Chart(ctxSeis, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Sd (Progetto)',
+                        data: [],
+                        borderColor: '#ef4444',
+                        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                        fill: true,
+                        tension: 0.2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { 
+                        x: { title: {display:true, text:'Periodo T [s]'}, grid: {color: '#334155'} },
+                        y: { title: {display:true, text:'Sa [g]'}, grid: {color: '#334155'} }
+                    }
+                }
+            });
+
+            // 3. Geo Chart (Area/Line rotated essentially)
+            const ctxGeo = document.getElementById('geoChart').getContext('2d');
+            state.charts.geo = new Chart(ctxGeo, {
+                type: 'scatter',
+                data: {
+                    datasets: [{
+                        label: 'Pressione Terreno',
+                        data: [],
+                        showLine: true,
+                        borderColor: '#10b981', // emerald
+                        backgroundColor: 'rgba(16, 185, 129, 0.2)',
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { title: {display:true, text:'Pressione [kPa]'}, min: 0, grid: {color: '#334155'} },
+                        y: { 
+                            title: {display:true, text:'Profondità z [m]'}, 
+                            reverse: true, // Depth goes down
+                            min: 0,
+                            grid: {color: '#334155'}
+                        }
+                    }
+                }
+            });
+
+            runCalculations();
+        };
+
+        // Close modal on click outside
+        window.onclick = function(event) {
+            if (event.target == document.getElementById('slabModal')) closeModal();
+        }
+    </script>
+</body>
+</html>
